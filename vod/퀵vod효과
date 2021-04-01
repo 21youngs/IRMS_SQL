@@ -1,0 +1,800 @@
+select * from mmab06t01 where title like '%SKY 캐슬%'
+
+select * from mmab06t01 where title like '남자친구%'
+
+select * from mmab06t01 where title like '황후의 품격%'
+
+select * from mmab06t01 where title like '하나뿐인 내편%'
+
+select * from mmab06t01 where title like '나 혼자 산다%'
+
+select * from mmab06t01 where title like '미운 우리 새끼%'
+
+select  to_date('20181217','yyyymmdd') - to_date('20181017','yyyymmdd') from dual
+
+-- 퀵VOD 콘텐츠별 매출 비교 , 도입 전후 
+select cp_nm,GENRE_NM,title, 
+case when 시청일 > '20181217' then  '퀵이후'
+ else '퀵이전'end 구분, 
+--substr(buy_dh ,1, 6) 구매월 , 
+--substr(FST_REGR_DH ,1, 8) 최초등록일, 
+sum(decode(buy_type_cd,'1',usg_amt,0)) VOD매출,
+count(*) 주문수,
+sum(주문경과시간)/count(*)
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	buy_type_cd,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '20181017' and '20190217'||'999999'
+	and FST_REGR_DH > '20181001'
+	--and b.cp_nm in ('KBS')
+	--and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ('JTBC',	'KBS',	'MBC',	'MBC PLUS',	'MBN',	'SBS',	'채널A', 'CJ ENM')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	and buy_type_cd ='1'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008' 
+   --and ( b.TITLE like '남자친구%' or  b.TITLE like '스카이캐슬%'  )  
+) group by cp_nm,GENRE_NM,title, substr(FST_REGR_DH ,1, 8),
+case when 시청일 > '20181217' then  '퀵이후'
+ else '퀵이전'
+end
+
+
+
+-- 퀵VOD 빠른 다시보기 
+select cp_nm,GENRE_NM,title, 
+substr(buy_dh ,1, 6) 구매월 , 
+substr(buy_dh ,1, 8) 구매일,  
+substr(FST_REGR_DH ,1, 8) 최초등록일, 
+case when trunc(주문경과시간,0) <= 3 then '3시간이내'
+     when  trunc(주문경과시간,0) <= 6 then '6시간이내'
+	 when trunc(주문경과시간,0) <= 12 then '12시간이내'
+	 when trunc(주문경과시간,0) <= 24 then '1일이내'
+	 when trunc(주문경과시간,0) <= 48 then '2일이내' 
+	 when trunc(주문경과시간,0) <= 36 then '3일이내'
+	 when trunc(주문경과시간,0) <= 168 then '일주일이내'  
+else '일주일이후'  end	 경과시간,
+sum(decode(buy_type_cd,'1',usg_amt,0)) VOD매출,
+count(*) 주문수
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	buy_type_cd,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+	case when cp_nm in ('KBS','MBC','SBS') then '지상파'
+	when cp_nm in (     
+					'asiantv',    
+					'AXN',        
+					'channelW',   
+					'chchina',    
+					'CJENM',      
+					'C-MUSIC',    
+					'ebs',        
+					'JTBC',        
+					'MBN',       
+					'skyTV',      
+					'TV조선',     
+					'YTNDMB',     
+					'국방TV',     
+					'라이프타임', 
+					'부산MBC',    
+					'채널A',      
+					'충북MBC',    
+					'클래시카',   
+					'텔레노벨라', 
+					'히스토리',   
+					'해피독TV',   
+					'KTskylife',  
+					'스포티비온'
+					) then 'TV 다시보기'
+	when cp_nm in ('대원방송',
+					'애니맥스',
+					'애니원',
+					'애니플러스',
+					'Disney Channel',
+					'디자인 에그',
+					'아이코닉스',
+					'영실업',
+					'재능TV',
+					'카툰네트워크',
+					'키즈원TV',
+					'투니버스',
+					'퍼니플럭스',
+					'핑크퐁',
+					'캐리TV',
+					'신기한나라TV'
+					) then '키즈/애니' 			
+     when main_cate_nm like 'TV%' then 'TV 다시보기'
+     when main_cate_nm like 'CJ%' then 'TV 다시보기' 
+     when main_cate_nm like 'sky TV%' then 'TV 다시보기' 
+	 when main_cate_nm like 'JTBC%' then 'TV 다시보기'
+	 when main_cate_nm like '키즈%' then '키즈/애니' 
+     when main_cate_nm like '애니%' then '키즈/애니' 
+     when main_cate_nm like 'PLAYY%' then '영화'
+	 when main_cate_nm = '무비초이스' then '영화'
+	 when main_cate_nm in ('KBS','MBC','SBS') then '지상파'
+	 when main_cate_nm like '지상파%'  then 'TV 다시보기'
+	 when main_cate_nm like '디즈니%'  then '영화'
+ 	 when main_cate_nm like 'NULL%'  then '영화'
+	 when main_cate_nm like '성인%'  then '성인'
+ 	 when main_cate_nm is null  then '영화'
+	 when main_cate_nm like '%추석%'  then '영화'
+else '영화'
+end 카테고리,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '20181001' and '20190220'||'999999'
+	--and b.cp_nm in ('KBS')
+	--and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ('JTBC',	'KBS',	'MBC',	'MBC PLUS',	'MBN',	'SBS',	'채널A', 'CJ ENM')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	and buy_type_cd ='1'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008' 
+   --and ( b.TITLE like '남자친구%' or  b.TITLE like '스카이캐슬%'  )  
+) group by cp_nm,GENRE_NM,title, substr(buy_dh ,1, 6),substr(FST_REGR_DH ,1, 8), substr(buy_dh ,1, 8),  
+case when trunc(주문경과시간,0) <= 3 then '3시간이내'
+     when  trunc(주문경과시간,0) <= 6 then '6시간이내'
+	 when trunc(주문경과시간,0) <= 12 then '12시간이내'
+	 when trunc(주문경과시간,0) <= 24 then '1일이내'
+	 when trunc(주문경과시간,0) <= 48 then '2일이내' 
+	 when trunc(주문경과시간,0) <= 36 then '3일이내'
+	 when trunc(주문경과시간,0) <= 168 then '일주일이내'  
+else '일주일이후'  end	
+
+
+
+-- 퀵VOD 빠른 다시보기 
+select cp_nm,
+substr(buy_dh ,1, 6),
+--GENRE_NM,title, substr(buy_dh ,1, 6),substr(FST_REGR_DH ,1, 8), substr(buy_dh ,1, 8),  
+case when trunc(주문경과시간,0) <= 3 then '3시간이내'
+     when  trunc(주문경과시간,0) <= 6 then '6시간이내'
+	 when trunc(주문경과시간,0) <= 12 then '12시간이내'
+	 when trunc(주문경과시간,0) <= 24 then '1일이내'
+	 when trunc(주문경과시간,0) <= 48 then '2일이내' 
+	 when trunc(주문경과시간,0) <= 36 then '3일이내'
+	 when trunc(주문경과시간,0) <= 168 then '일주일이내'  
+else '일주일이후'  end	 경과시간,
+sum(decode(buy_type_cd,'1',usg_amt,0)) VOD매출,
+count(*) 주문수,
+count(distinct sc_id) 이용자수
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	buy_type_cd,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+	case when cp_nm in ('KBS','MBC','SBS') then '지상파'
+	when cp_nm in (     
+					'asiantv',    
+					'AXN',        
+					'channelW',   
+					'chchina',    
+					'CJENM',      
+					'C-MUSIC',    
+					'ebs',        
+					'JTBC',        
+					'MBN',       
+					'skyTV',      
+					'TV조선',     
+					'YTNDMB',     
+					'국방TV',     
+					'라이프타임', 
+					'부산MBC',    
+					'채널A',      
+					'충북MBC',    
+					'클래시카',   
+					'텔레노벨라', 
+					'히스토리',   
+					'해피독TV',   
+					'KTskylife',  
+					'스포티비온'
+					) then 'TV 다시보기'
+	when cp_nm in ('대원방송',
+					'애니맥스',
+					'애니원',
+					'애니플러스',
+					'Disney Channel',
+					'디자인 에그',
+					'아이코닉스',
+					'영실업',
+					'재능TV',
+					'카툰네트워크',
+					'키즈원TV',
+					'투니버스',
+					'퍼니플럭스',
+					'핑크퐁',
+					'캐리TV',
+					'신기한나라TV'
+					) then '키즈/애니' 			
+     when main_cate_nm like 'TV%' then 'TV 다시보기'
+     when main_cate_nm like 'CJ%' then 'TV 다시보기' 
+     when main_cate_nm like 'sky TV%' then 'TV 다시보기' 
+	 when main_cate_nm like 'JTBC%' then 'TV 다시보기'
+	 when main_cate_nm like '키즈%' then '키즈/애니' 
+     when main_cate_nm like '애니%' then '키즈/애니' 
+     when main_cate_nm like 'PLAYY%' then '영화'
+	 when main_cate_nm = '무비초이스' then '영화'
+	 when main_cate_nm in ('KBS','MBC','SBS') then '지상파'
+	 when main_cate_nm like '지상파%'  then 'TV 다시보기'
+	 when main_cate_nm like '디즈니%'  then '영화'
+ 	 when main_cate_nm like 'NULL%'  then '영화'
+	 when main_cate_nm like '성인%'  then '성인'
+ 	 when main_cate_nm is null  then '영화'
+	 when main_cate_nm like '%추석%'  then '영화'
+else '영화'
+end 카테고리,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '20181101' and '20190120'||'999999'
+	--and b.cp_nm in ('KBS')
+	--and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ('JTBC',	'KBS',	'MBC',	'MBC PLUS',	'MBN',	'SBS',	'채널A', 'CJ ENM')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	--and buy_type_cd ='1'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008'   
+) group by cp_nm,substr(buy_dh ,1, 6),
+--GENRE_NM,title, substr(buy_dh ,1, 6),substr(FST_REGR_DH ,1, 8), substr(buy_dh ,1, 8),  
+case when trunc(주문경과시간,0) <= 3 then '3시간이내'
+     when  trunc(주문경과시간,0) <= 6 then '6시간이내'
+	 when trunc(주문경과시간,0) <= 12 then '12시간이내'
+	 when trunc(주문경과시간,0) <= 24 then '1일이내'
+	 when trunc(주문경과시간,0) <= 48 then '2일이내' 
+	 when trunc(주문경과시간,0) <= 36 then '3일이내'
+	 when trunc(주문경과시간,0) <= 168 then '일주일이내'  
+else '일주일이후'  end	 
+
+
+select * from mmab06t01 where cp_nm like 'CJ%'
+
+-- 퀵VOD 빠른 다시보기 
+select substr(buy_dh ,1, 6),  
+cp_nm, 
+count(distinct 유료이용자) ,
+count(distinct 월정액이용자),
+count(distinct 무료이용자) 
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+	case when cp_nm in ('KBS','MBC','SBS') then '지상파'
+	when cp_nm in (     
+					'asiantv',    
+					'AXN',        
+					'channelW',   
+					'chchina',    
+					'CJENM',      
+					'C-MUSIC',    
+					'ebs',        
+					'JTBC',        
+					'MBN',       
+					'skyTV',      
+					'TV조선',     
+					'YTNDMB',     
+					'국방TV',     
+					'라이프타임', 
+					'부산MBC',    
+					'채널A',      
+					'충북MBC',    
+					'클래시카',   
+					'텔레노벨라', 
+					'히스토리',   
+					'해피독TV',   
+					'KTskylife',  
+					'스포티비온'
+					) then 'TV 다시보기'
+	when cp_nm in ('대원방송',
+					'애니맥스',
+					'애니원',
+					'애니플러스',
+					'Disney Channel',
+					'디자인 에그',
+					'아이코닉스',
+					'영실업',
+					'재능TV',
+					'카툰네트워크',
+					'키즈원TV',
+					'투니버스',
+					'퍼니플럭스',
+					'핑크퐁',
+					'캐리TV',
+					'신기한나라TV'
+					) then '키즈/애니' 			
+     when main_cate_nm like 'TV%' then 'TV 다시보기'
+     when main_cate_nm like 'CJ%' then 'TV 다시보기' 
+     when main_cate_nm like 'sky TV%' then 'TV 다시보기' 
+	 when main_cate_nm like 'JTBC%' then 'TV 다시보기'
+	 when main_cate_nm like '키즈%' then '키즈/애니' 
+     when main_cate_nm like '애니%' then '키즈/애니' 
+     when main_cate_nm like 'PLAYY%' then '영화'
+	 when main_cate_nm = '무비초이스' then '영화'
+	 when main_cate_nm in ('KBS','MBC','SBS') then '지상파'
+	 when main_cate_nm like '지상파%'  then 'TV 다시보기'
+	 when main_cate_nm like '디즈니%'  then '영화'
+ 	 when main_cate_nm like 'NULL%'  then '영화'
+	 when main_cate_nm like '성인%'  then '성인'
+ 	 when main_cate_nm is null  then '영화'
+	 when main_cate_nm like '%추석%'  then '영화'
+else '영화'
+end 카테고리,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '201811101' and '20190116'||'999999'
+	--and b.cp_nm in ('KBS')
+	and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ('JTBC',	'KBS',	'MBC',	'MBC PLUS',	'MBN',	'SBS',	'채널A', 'CJ ENM')
+	--and b.cp_nm in ('CJ ENM', 'JTBC')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	--and buy_type_cd ='1'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008'   
+) group by substr(buy_dh ,1, 6),  cp_nm 
+
+
+
+select  substr(buy_dh ,1, 6),  cp_nm , count(distinct 무료이용자 )
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+	case when cp_nm in ('KBS','MBC','SBS') then '지상파'
+	when cp_nm in (     
+					'asiantv',    
+					'AXN',        
+					'channelW',   
+					'chchina',    
+					'CJENM',      
+					'C-MUSIC',    
+					'ebs',        
+					'JTBC',        
+					'MBN',       
+					'skyTV',      
+					'TV조선',     
+					'YTNDMB',     
+					'국방TV',     
+					'라이프타임', 
+					'부산MBC',    
+					'채널A',      
+					'충북MBC',    
+					'클래시카',   
+					'텔레노벨라', 
+					'히스토리',   
+					'해피독TV',   
+					'KTskylife',  
+					'스포티비온'
+					) then 'TV 다시보기'
+	when cp_nm in ('대원방송',
+					'애니맥스',
+					'애니원',
+					'애니플러스',
+					'Disney Channel',
+					'디자인 에그',
+					'아이코닉스',
+					'영실업',
+					'재능TV',
+					'카툰네트워크',
+					'키즈원TV',
+					'투니버스',
+					'퍼니플럭스',
+					'핑크퐁',
+					'캐리TV',
+					'신기한나라TV'
+					) then '키즈/애니' 			
+     when main_cate_nm like 'TV%' then 'TV 다시보기'
+     when main_cate_nm like 'CJ%' then 'TV 다시보기' 
+     when main_cate_nm like 'sky TV%' then 'TV 다시보기' 
+	 when main_cate_nm like 'JTBC%' then 'TV 다시보기'
+	 when main_cate_nm like '키즈%' then '키즈/애니' 
+     when main_cate_nm like '애니%' then '키즈/애니' 
+     when main_cate_nm like 'PLAYY%' then '영화'
+	 when main_cate_nm = '무비초이스' then '영화'
+	 when main_cate_nm in ('KBS','MBC','SBS') then '지상파'
+	 when main_cate_nm like '지상파%'  then 'TV 다시보기'
+	 when main_cate_nm like '디즈니%'  then '영화'
+ 	 when main_cate_nm like 'NULL%'  then '영화'
+	 when main_cate_nm like '성인%'  then '성인'
+ 	 when main_cate_nm is null  then '영화'
+	 when main_cate_nm like '%추석%'  then '영화'
+else '영화'
+end 카테고리,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '20181101' and '20190116'||'999999'
+	--and b.cp_nm in ('KBS')
+	--and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ( 'CJ ENM')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	--and buy_type_cd ='3'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008' 
+)group by substr(buy_dh ,1, 6),  cp_nm 
+
+
+
+-- 월정액 신규 가입수 
+select 
+case when c.prdt_nm like '%MBC%' or c.prdt_nm like '%SBS%' or c.prdt_nm like '%KBS%' or c.prdt_nm like '%지상파%' then '지상파'
+	 when c.prdt_nm like '%CJ%'  then '종편'
+	 when c.prdt_nm like '%JTBC%'  then '종편'
+	 when c.prdt_nm like '%채널%'  then '종편'
+	 when c.prdt_nm like '%MBN%'  then '종편'
+	 when c.prdt_nm like '%애니맥스%'  then '키즈/기타'
+	 when c.prdt_nm like '%투니버스%'  then '키즈/기타'
+	 when c.prdt_nm like '%PLAYY%'  then '키즈/기타'
+	 when c.prdt_nm like '%EBS%'  then '키즈/기타'
+	 else '온디멘드'
+end 구분,
+c.prdt_nm 상품명, 
+substr(a.svc_open_dh,1,6) 월 , 
+--substr(a.rscs_Dh,1,8) vod해지일,
+a.usg_amt 금액, 
+count(*) 건수
+from cmcc03t01 a, cmcc01t01 b, mmaa04t01 c
+where a.svc_open_dh <  :mm||'31999999'
+--and nvl(a.rscs_dh,'29991231') > :mm
+and a.scrbr_no=b.scrbr_no
+and a.prdt_cd=c.prdt_cd 
+and B.SALE_TYPE_CD='1'
+and b.scrbr_nm not like '%사업용%'	
+and not exists (select 1 from cmcd01t01 x, mmaj01t01 y where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.svc_open_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and nvl(substr(a.rscs_dh,1.8),'29991231') between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%' )
+and c.prdt_type_cd in ('25','26')
+and c.prdt_nm not like '%캐치온%'
+group by c.prdt_nm , substr(a.svc_open_dh,1,6)  ,a.usg_amt
+
+
+-- 10. 월정액 유지수 조회 
+-- 이게 맞는것 날짜조건 복잡하니 유의 
+select 
+:mm 월, 
+-- 구분,
+--상품명,상품코드, 금액,
+nvl(sum(case when substr(vod개통일,1,6)=:mm then 건수 end),0) 당월가입,
+nvl(sum(case when substr(vod해지일,1,6)=:mm then 건수 end),0) 당월해지,
+--sum(case when (vod개통일 < :mm||'31999999' and nvl(vod해지일,'29991231') > :mm||'01') then 건수 end) 당월사용자수,
+sum(case when nvl(vod해지일,'29991231') > :mm||'31' then 건수 end) 당월유지수
+--금액*sum(case when (vod개통일 < :mm||'31999999' and nvl(vod해지일,'29991231') > :mm||'01') then 건수 end) 예상매출
+from (
+select 
+case when c.prdt_nm like '%MBC%' or c.prdt_nm like '%SBS%' or c.prdt_nm like '%KBS%' or c.prdt_nm like '%지상파%' then '지상파'
+	 when c.prdt_nm like '%CJ%'  then '종편'
+	 when c.prdt_nm like '%JTBC%'  then '종편'
+	 when c.prdt_nm like '%채널%'  then '종편'
+	 when c.prdt_nm like '%MBN%'  then '종편'
+	 when c.prdt_nm like '%애니맥스%'  then '키즈/기타'
+	 when c.prdt_nm like '%투니버스%'  then '키즈/기타'
+	 when c.prdt_nm like '%PLAYY%'  then '키즈/기타'
+	 when c.prdt_nm like '%EBS%'  then '키즈/기타'
+	 else '온디멘드'
+end 구분,
+c.prdt_nm 상품명, 
+c.prdt_cd 상품코드,
+substr(a.svc_open_dh,1,8) vod개통일, substr(a.rscs_Dh,1,8) vod해지일,
+a.usg_amt 금액, count(*) 건수
+from cmcc03t01 a, cmcc01t01 b, mmaa04t01 c
+where a.svc_open_dh <  :mm||'31999999'
+and nvl(a.rscs_dh,'29991231') > :mm
+and a.scrbr_no=b.scrbr_no
+and a.prdt_cd=c.prdt_cd 
+and B.SALE_TYPE_CD='1'
+and b.scrbr_nm not like '%사업용%'	
+and not exists (select 1 from cmcd01t01 x, mmaj01t01 y where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.svc_open_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and nvl(substr(a.rscs_dh,1.8),'29991231') between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%' )
+and c.prdt_type_cd in ('25','26')
+group by c.prdt_nm ,c.prdt_cd,substr(a.svc_open_dh,1,8), substr(a.rscs_Dh,1,8)  ,a.usg_amt
+)
+where 상품명 not like '%캐치온%'
+--and 구분 <> '온디멘드'
+--where 구분 <> '온디멘드'
+--where (상품명 like 'KBS%' or 상품명 like 'MBC%' or 상품명 like 'SBS%' or 상품명 like '지상파%' or 상품명 like 'JTBC%' )
+
+
+
+
+-- 퀵VOD 빠른 다시보기 관련 이용현황 변화 
+select cp_nm, 
+substr(buy_dh ,1, 6) 월,
+--substr(FST_REGR_DH ,1, 8), 
+--substr(buy_dh ,1, 8) 일, 
+sum(decode(buy_type_cd,'1',usg_amt,0)) VOD매출,
+sum(decode(buy_type_cd,'1',1,0)) 유료주문수,
+sum(decode(buy_type_cd,'2',1,0)) 월정액시청수,
+sum(decode(buy_type_cd,'3',1,0)) 무료시청수
+from (
+select  
+		case 
+	   when f.equip_model_nm like '%안드로이드%' then '안드로이드'
+	   else 'UHD/HD'
+	end 수신기분류,
+	a.sc_id,
+	usg_amt,
+	buy_type_cd,
+	decode(buy_type_cd,1,a.SC_ID) 유료이용자,
+	decode(buy_type_cd,2,a.SC_ID) 월정액이용자,
+	decode(buy_type_cd,3,a.SC_ID) 무료이용자,
+	case when cp_nm in ('KBS','MBC','SBS') then '지상파'
+	when cp_nm in (     
+					'asiantv',    
+					'AXN',        
+					'channelW',   
+					'chchina',    
+					'CJENM',      
+					'C-MUSIC',    
+					'ebs',        
+					'JTBC',        
+					'MBN',       
+					'skyTV',      
+					'TV조선',     
+					'YTNDMB',     
+					'국방TV',     
+					'라이프타임', 
+					'부산MBC',    
+					'채널A',      
+					'충북MBC',    
+					'클래시카',   
+					'텔레노벨라', 
+					'히스토리',   
+					'해피독TV',   
+					'KTskylife',  
+					'스포티비온'
+					) then 'TV 다시보기'
+	when cp_nm in ('대원방송',
+					'애니맥스',
+					'애니원',
+					'애니플러스',
+					'Disney Channel',
+					'디자인 에그',
+					'아이코닉스',
+					'영실업',
+					'재능TV',
+					'카툰네트워크',
+					'키즈원TV',
+					'투니버스',
+					'퍼니플럭스',
+					'핑크퐁',
+					'캐리TV',
+					'신기한나라TV'
+					) then '키즈/애니' 			
+     when main_cate_nm like 'TV%' then 'TV 다시보기'
+     when main_cate_nm like 'CJ%' then 'TV 다시보기' 
+     when main_cate_nm like 'sky TV%' then 'TV 다시보기' 
+	 when main_cate_nm like 'JTBC%' then 'TV 다시보기'
+	 when main_cate_nm like '키즈%' then '키즈/애니' 
+     when main_cate_nm like '애니%' then '키즈/애니' 
+     when main_cate_nm like 'PLAYY%' then '영화'
+	 when main_cate_nm = '무비초이스' then '영화'
+	 when main_cate_nm in ('KBS','MBC','SBS') then '지상파'
+	 when main_cate_nm like '지상파%'  then 'TV 다시보기'
+	 when main_cate_nm like '디즈니%'  then '영화'
+ 	 when main_cate_nm like 'NULL%'  then '영화'
+	 when main_cate_nm like '성인%'  then '성인'
+ 	 when main_cate_nm is null  then '영화'
+	 when main_cate_nm like '%추석%'  then '영화'
+else '영화'
+end 카테고리,
+cp_nm,
+b.GENRE_NM,b.TITLE,
+FST_REGR_DH,
+--b.REGR_DH,
+buy_dh,
+substr(buy_dh ,1, 8) 시청일,
+trunc((to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'))*24,0) 주문경과시간,
+trunc(to_date(buy_dh,'yyyymmddhh24miss') - to_date(FST_REGR_DH,'yyyymmddhh24miss'),0) 경과일수
+	from cmcb15t01 a, MMAB06T01 b, cmcc01t01 c , cmaa01t01 d, cmcc04t01 e, mmda03t01 f,zzaa02t01 g, mmaa25t01 i,
+	  (select zip_cd, min(do_nm) do_nm,min(sigun_nm) sigun_nm, min(TOWN_NM) TOWN_NM, min(DELVR_PLCE_RI_NM)DELVR_PLCE_RI_NM
+		       from zzaa03t01 
+		       group by zip_cd) h 
+	where a.VOD_ID = b.vod_id(+) 
+	and a.buy_dh between '20180101' and '20190218'||'999999'
+	--and b.cp_nm in ('KBS')
+	--and FST_REGR_DH not like '%0000'
+	and b.cp_nm in ('JTBC',	'KBS',	'MBC',	'MBC PLUS',	'MBN',	'SBS',	'채널A', 'CJ ENM')
+	and a.scrbr_no = c.scrbr_no
+	and c.cust_no = d.cust_no
+	and nvl(a.cncl_yn,'N') = 'N'
+	--and a.scrbr_no='0000737728'
+	and a.scrbr_no = e.scrbr_no
+	and a.sc_id = e.sc_id
+	and e.stb_model_no = f.equip_model_no	and e.SVC_OPEN_DH < a.buy_dh  -- 수신기교체자 주문일시고려
+    and nvl(e.RSCS_DH,'29991231') > a.buy_dh  -- 수신기교체자 주문일시고려
+	and sale_type_cd = '1'
+	and c.scrbr_nm not like '%사업용%'	
+	--and buy_type_cd ='1'  -- 종량제 구매건만 
+	and c.ENTR_PKG_GRADE_CD = i.ENTR_PKG_GRADE_CD
+	and not exists (select 1 from cmcd01t01 x, mmaj01t01 y 
+	                where x.event_no = y.event_no and y.event_use_type in ('4','5')
+	                and a.scrbr_no = x.scrbr_no
+					and a.buy_dh between substr(x.svc_open_dh,1,6) and nvl(x.rscs_dh,'9')
+					and y.event_nm like '%사업용%'
+					)
+	and c.INSTAL_plce_ZIP_CD= h.ZIP_CD		
+	and d.cust_type_cd=g.cd
+   and g.cd_cl='CM008'   
+) group by cp_nm,substr(buy_dh ,1, 6)--, substr(buy_dh ,1, 8)
+	
