@@ -9,6 +9,7 @@ $ git config --global user.name "IRMS_SQL-.git"
 $ git config --global user.email "21youngs1@gmail.com"
 
 $ git clone https://github.com/21youngs/IRMS_SQL-.git
+
 Cloning into 'IRMS_SQL-'...
 remote: Enumerating objects: 30, done.
 remote: Counting objects: 100% (30/30), done.
